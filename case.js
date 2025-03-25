@@ -246,165 +246,147 @@ break;
         }
     }
     break;
-      case "cpanel": {
-        if (!checkOwner(m, ptz)) return;
-    
-        if (args.length < 4) {
-            return ptz.sendMessage(m.key.remoteJid, { text: "Gunakan: .cpanel <username> <nama server> <cpu jika 0 maka unli> <disk jika 0 maka unli> <ram jika 0 maka unli>" }, { quoted: m });
-        }
-    
-        const username = args[0];
-        const serverName = args[1];
-        const cpu = parseInt(args[2]);
-        const disk = parseInt(args[3]);
-        const ram = parseInt(args[4]);
-    
-        try {
-          // Cari ID user berdasarkan username
-          const userResponse = await axios.get(`${global.domain}/api/application/users`, {
-              headers: {
-                  "Accept": "application/json",
-                  "Content-Type": "application/json",
-                  "Authorization": `Bearer ${global.capiKey}`
+    case "cpanel": {
+      if (!checkOwner(m, ptz)) return;
+  
+      if (args.length < 4) {
+          return ptz.sendMessage(m.key.remoteJid, { 
+              text: `📋 *Usage:* .cpanel <username> <server_name> <CPU%> <DiskMB> <RamMB>\nSet 0 for unlimited resources` 
+          }, { quoted: m });
+      }
+  
+      const username = args[0];
+      const serverName = args[1];
+      const cpu = parseInt(args[2]);
+      const disk = parseInt(args[3]);
+      const ram = parseInt(args[4]);
+  
+      // Input validation
+      if ([cpu, disk, ram].some(isNaN)) {
+          return ptz.sendMessage(m.key.remoteJid, { 
+              text: "❌ Invalid input! CPU/Disk/RAM must be numbers." 
+          }, { quoted: m });
+      }
+  
+      try {
+          // 1. Check username exists using filter
+          const userCheck = await axios.get(`${global.domain}/api/application/users?filter[username]=${encodeURIComponent(username)}`, {
+              headers: { 
+                  "Authorization": `Bearer ${global.capiKey}`,
+                  "Accept": "application/json"
               }
           });
-      
-          const user = userResponse.data.data.find(u => u.attributes.username === username);
-          if (!user) {
-              return ptz.sendMessage(m.key.remoteJid, { text: "User tidak ditemukan!" }, { quoted: m });
+  
+          if (userCheck.data.meta.pagination.total === 0) {
+              return ptz.sendMessage(m.key.remoteJid, { 
+                  text: `❌ Username "${username}" not found in panel!\nUse .adduser first to create account.` 
+              }, { quoted: m });
           }
-      
-          const userId = user.attributes.id;
-
-         // Ambil daftar node dan cari node dengan server paling sedikit
-const nodesResponse = await axios.get(`${global.domain}/api/application/nodes`, {
-  headers: {
-      "Accept": "application/json",
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${global.capiKey}`
+  
+          const user = userCheck.data.data[0].attributes;
+  
+          // 2. Node selection with available allocations
+          const nodes = await axios.get(`${global.domain}/api/application/nodes?include=allocations`, {
+              headers: { "Authorization": `Bearer ${global.capiKey}` }
+          });
+  
+          const bestNode = nodes.data.data.find(node => 
+              node.attributes.relationships.allocations.data.some(a => !a.attributes.assigned)
+          );
+  
+          if (!bestNode) {
+              return ptz.sendMessage(m.key.remoteJid, { 
+                  text: "❌ No nodes with free allocations available!" 
+              }, { quoted: m });
+          }
+  
+          // 3. Create server
+          await axios.post(`${global.domain}/api/application/servers`, {
+              name: serverName,
+              user: user.id,
+              egg: 15,
+              nest: 5,
+              docker_image: "ghcr.io/parkervcp/yolks:nodejs_18",
+              startup: "npm start",
+              environment: {
+                  "CMD_RUN": "npm start",
+                  "JS_FILE": "index.js",
+                  "P_SERVER_LOCATION": bestNode.attributes.uuid,
+                  "P_SERVER_UUID": bestNode.attributes.uuid
+              },
+              limits: {
+                  memory: ram || 0,
+                  swap: 0,
+                  disk: disk || 0,
+                  io: 500,
+                  cpu: cpu || 0
+              },
+              feature_limits: {
+                  databases: 5,
+                  backups: 1,
+                  allocations: 1
+              },
+              allocation: {
+                  default: bestNode.attributes.relationships.allocations.data
+                      .find(a => !a.attributes.assigned).attributes.id
+              }
+          }, {
+              headers: { "Authorization": `Bearer ${global.capiKey}` }
+          });
+  
+          // 4. Send response
+          const message = `
+  ✅ *SERVER CREATED SUCCESSFULLY*
+  
+  🔗 *Panel URL:* ${global.domain}
+  👤 *Username:* ${user.username}
+  📧 *Email:* ${user.email}
+  🖥 *Server:* ${serverName}
+  
+  ⚙️ *Resources*
+  ▸ RAM: ${ram || "Unlimited"} MB
+  ▸ CPU: ${cpu || "Unlimited"}%
+  ▸ Disk: ${disk || "Unlimited"} MB
+  
+  📍 *Node:* ${bestNode.attributes.name}
+  🆔 *User ID:* ${user.id}
+  
+  ⚠️ Use existing account password
+  `;
+  
+          ptz.sendMessage(m.key.remoteJid, { 
+              text: message,
+              contextInfo: {
+                  externalAdReply: {
+                      title: `${serverName} Panel`,
+                      body: `Created for ${user.username}`,
+                      thumbnail: await fetchThumbnail()
+                  }
+              }
+          }, { quoted: m });
+  
+      } catch (error) {
+          const errorMsg = error.response?.data?.errors?.[0]?.detail || 
+                         "Check panel resources/availability";
+                         
+          ptz.sendMessage(m.key.remoteJid, { 
+              text: `❌ *CREATION FAILED*\n\n${errorMsg}` 
+          }, { quoted: m });
+      }
   }
-});
-
-const nodes = nodesResponse.data.data;
-
-// Perbaiki cara sorting
-nodes.sort((a, b) => {
-  const serverCountA = a.attributes.relationships?.servers?.data?.length || 0;
-  const serverCountB = b.attributes.relationships?.servers?.data?.length || 0;
-
-  if (serverCountA !== serverCountB) {
-      return serverCountA - serverCountB; // Urutkan dari yang paling sedikit servernya
+  break;
+  
+  // Helper function
+  async function fetchThumbnail() {
+      try {
+          return (await axios.get("https://i.ibb.co/0jQYfK9/ptero-logo.png", { 
+              responseType: "arraybuffer",
+              timeout: 5000 
+          })).data;
+      } catch {
+          return null; // No thumbnail if failed
+      }
   }
-  return a.attributes.id - b.attributes.id; // Jika jumlah sama, pilih ID terkecil
-});
-
-if (nodes.length === 0) {
-  return ptz.sendMessage(m.key.remoteJid, { text: "Tidak ada node tersedia!" }, { quoted: m });
-}
-
-const bestNode = nodes[0]; // Node dengan server paling sedikit & ID terkecil jika sama
-const nodeId = bestNode.attributes.id;
-const nodeUUID = bestNode.attributes.uuid;
-
-// Ambil ID alokasi yang tersedia dari node terbaik
-const allocationsResponse = await axios.get(`${global.domain}/api/application/nodes/${nodeId}/allocations`, {
-  headers: {
-      "Accept": "application/json",
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${global.capiKey}`
-  }
-});
-
-const allocation = allocationsResponse.data.data.find(a => !a.attributes.assigned);
-if (!allocation) {
-  return ptz.sendMessage(m.key.remoteJid, { text: "Tidak ada alokasi tersedia di node terpilih!" }, { quoted: m });
-}
-
-const allocationId = allocation.attributes.id;
-      
-         // Buat server dengan alokasi dan UUID node yang valid
-const serverResponse = await axios.post(`${global.domain}/api/application/servers`, {
-  name: serverName,
-  user: userId,
-  egg: 15, // Sesuai dengan bot WhatsApp
-  nest: 5,
-  docker_image: "ghcr.io/parkervcp/yolks:nodejs_18",
-  startup: "npm start",
-  environment: {
-      "CMD_RUN": "npm start",
-      "JS_FILE": "index.js",
-      "P_SERVER_LOCATION": nodeUUID,  // UUID Node
-      "P_SERVER_UUID": nodeUUID       // UUID Node
-  },
-  limits: {
-      memory: ram === 0 ? 0 : ram,
-      swap: 0,
-      disk: disk === 0 ? 0 : disk,
-      io: 500,
-      cpu: cpu === 0 ? 0 : cpu
-  },
-  feature_limits: {
-      databases: 5,
-      backups: 1,
-      allocations: 1
-  },
-  allocation: {
-      default: allocationId  // Menggunakan ID alokasi yang valid
-  }
-}, {
-  headers: {
-      "Accept": "application/json",
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${global.capiKey}`
-  }
-});
-      
-const panelInfo = `
-🎉 *PANEL BERHASIL DIBUAT!*
-
-📋 *Detail Akun*
-├ 🔗 *Link Panel*: ${global.domain}
-├ 👤 *Username*: ${username}
-├ 🔑 *Password*: password
-└ 📧 *Email*: ${username}@gmail.com
-
-⚙️ *Spesifikasi Server*
-├ 🧠 *RAM*: ${ram === 0 ? "♾️ Unlimited" : ram + " MB"}
-├ ⚡ *CPU*: ${cpu === 0 ? "♾️ Unlimited" : cpu + "%"}
-└ 💽 *Disk*: ${disk === 0 ? "♾️ Unlimited" : disk + " MB"}
-
-📛 *Nama Server*: ${serverName}
-🆔 *User ID*: ${userId}
-
-💡 *Note*: 
-- Segera ganti password setelah login pertama!
-- Resource unlimited tetap ada batas fair usage
-`;
-
-        ptz.sendMessage(m.key.remoteJid, { 
-            text: panelInfo,
-            contextInfo: {
-                externalAdReply: {
-                    title: "Panel Created Successfully",
-                    body: "Pterodactyl Panel",
-                    thumbnail: await (await axios.get("https://i.ibb.co/0jQYfK9/ptero-logo.png", { responseType: "arraybuffer" })).data
-                }
-            }
-        }, { quoted: m });
-
-    } catch (error) {
-        console.error("Error:", error.response?.data || error);
-        ptz.sendMessage(m.key.remoteJid, { 
-            text: "❌ *Gagal membuat panel!*\n\n" + 
-                  "Penyebab:\n" +
-                  "▸ User tidak ditemukan\n" +
-                  "▸ Node penuh\n" +
-                  "▸ Kesalahan sistem\n\n" +
-                  "⚠️ Cek log untuk detail"
-        }, { quoted: m });
-    }
-}
-break;
     
       case "alluser": {
         if (!checkOwner(m, ptz)) return;
