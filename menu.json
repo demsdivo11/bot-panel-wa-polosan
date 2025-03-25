@@ -1,0 +1,13 @@
+{
+    "menu": [
+      {
+        "command": "listserver",
+        "description": "Melihat daftar server"
+      },
+      {
+        "command": "adduser",
+        "description": "Menambahkan pengguna baru"
+      }
+    ]
+  }
+  
