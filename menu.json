@@ -15,6 +15,10 @@
       {
 "command": "listuser",
  "description": "Untuk Melihat Semua User!"
+      },
+      {
+"command": "alluser",
+ "description": "Untuk Melihat Semua Detail User!"
       }
     ]
   }

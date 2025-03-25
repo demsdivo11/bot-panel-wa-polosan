@@ -69,7 +69,42 @@ module.exports = async (ptz, m) => {
     }
 
     switch (command) {
-     
+      case "alluser": {
+        if (!checkOwner(m, ptz)) return;
+    
+        try {
+            const response = await axios.get(`${global.domain}/api/application/users`, {
+                headers: {
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${global.capiKey}`
+                }
+            });
+    
+            const users = response.data.data;
+            if (users.length === 0) {
+                return ptz.sendMessage(m.key.remoteJid, { text: "Tidak ada user yang ditemukan." }, { quoted: m });
+            }
+    
+            let userList = "*📌 Daftar Pengguna:*";
+            users.forEach((user, index) => {
+                userList += `
+    🔹 *${index + 1}. ${user.attributes.username}*
+       ├ 🆔 ID: ${user.attributes.id}
+       ├ 📧 Email: ${user.attributes.email}
+       ├ 🔰 Admin: ${user.attributes.root_admin ? "✅" : "❌"}
+       └ 📅 Dibuat: ${user.attributes.created_at}
+    `;
+            });
+    
+            ptz.sendMessage(m.key.remoteJid, { text: userList }, { quoted: m });
+        } catch (error) {
+            console.error("Error fetching users:", error.response?.data || error);
+            ptz.sendMessage(m.key.remoteJid, { text: "Terjadi kesalahan saat mengambil daftar user." }, { quoted: m });
+        }
+    }
+    break;
+    
       case "listserver": {
         if (!checkOwner(m, ptz)) return;
     
