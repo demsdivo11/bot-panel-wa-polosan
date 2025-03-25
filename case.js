@@ -134,7 +134,7 @@ module.exports = async (ptz, m) => {
         }
     }
     break;
-    case "listowner": {
+    case "listown": {
       if (!checkOwner(m, ptz)) return;
   
       try {
@@ -359,21 +359,52 @@ const serverResponse = await axios.post(`${global.domain}/api/application/server
   }
 });
       
-          ptz.sendMessage(m.key.remoteJid, {
-              text: `Server berhasil dibuat!
-              \n🔹 *Nama Server:* ${serverName}
-              🆔 *User ID:* ${userId}
-              🔧 *CPU:* ${cpu === 0 ? "Unlimited" : cpu} %
-              💾 *Disk:* ${disk === 0 ? "Unlimited" : disk} MB
-              🖥️ *RAM:* ${ram === 0 ? "Unlimited" : ram} MB`
-          }, { quoted: m });
-      
-      } catch (error) {
-          console.error("Error creating server:", error.response?.data || error);
-          ptz.sendMessage(m.key.remoteJid, { text: "Terjadi kesalahan saat membuat server." }, { quoted: m });
-      }
+const panelInfo = `
+🎉 *PANEL BERHASIL DIBUAT!*
+
+📋 *Detail Akun*
+├ 🔗 *Link Panel*: ${global.domain}
+├ 👤 *Username*: ${username}
+├ 🔑 *Password*: password
+└ 📧 *Email*: ${username}@gmail.com
+
+⚙️ *Spesifikasi Server*
+├ 🧠 *RAM*: ${ram === 0 ? "♾️ Unlimited" : ram + " MB"}
+├ ⚡ *CPU*: ${cpu === 0 ? "♾️ Unlimited" : cpu + "%"}
+└ 💽 *Disk*: ${disk === 0 ? "♾️ Unlimited" : disk + " MB"}
+
+📛 *Nama Server*: ${serverName}
+🆔 *User ID*: ${userId}
+
+💡 *Note*: 
+- Segera ganti password setelah login pertama!
+- Resource unlimited tetap ada batas fair usage
+`;
+
+        ptz.sendMessage(m.key.remoteJid, { 
+            text: panelInfo,
+            contextInfo: {
+                externalAdReply: {
+                    title: "Panel Created Successfully",
+                    body: "Pterodactyl Panel",
+                    thumbnail: await (await axios.get("https://i.ibb.co/0jQYfK9/ptero-logo.png", { responseType: "arraybuffer" })).data
+                }
+            }
+        }, { quoted: m });
+
+    } catch (error) {
+        console.error("Error:", error.response?.data || error);
+        ptz.sendMessage(m.key.remoteJid, { 
+            text: "❌ *Gagal membuat panel!*\n\n" + 
+                  "Penyebab:\n" +
+                  "▸ User tidak ditemukan\n" +
+                  "▸ Node penuh\n" +
+                  "▸ Kesalahan sistem\n\n" +
+                  "⚠️ Cek log untuk detail"
+        }, { quoted: m });
     }
-    break;
+}
+break;
     
       case "alluser": {
         if (!checkOwner(m, ptz)) return;
