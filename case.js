@@ -1,4 +1,5 @@
-require("./config");
+const config = require("./config");
+
 const fs = require("fs");
 const util = require("util");
 const axios = require("axios");
@@ -10,18 +11,29 @@ const menuData = JSON.parse(fs.readFileSync("./menu.json", "utf-8"));
 global.domain = "https://panel.dfree.my.id";
 global.apiKey = "ptla_TqS4yxcnV0Z1ztkPruOXqSVUrQsDauNaRVZKpkcRdqX";
 global.capiKey = "ptlc_J0Wyv0z6kUZNoK963FszKIsC6Z3aRzepEBKDM2BLR6r";
+const ownerList = Array.isArray(config.owner) ? config.owner : [];
+global.owner = Array.isArray(config.owner) ? config.owner : [];
+
 function isUserOwner(m) {
-  return config.owner.includes(m.sender.replace(/[^0-9]/g, ""));
+    if (!ownerList || !Array.isArray(ownerList)) {
+        console.error("Config owner tidak ditemukan atau bukan array.");
+        return false;
+    }
+    if (!m.sender) {
+        console.error("Error: m.sender tidak ditemukan.");
+        return false;
+    }
+    return ownerList.includes(m.sender.replace(/[^0-9]/g, ""));
 }
 
 function checkOwner(m, ptz) {
-  if (!isUserOwner(m)) {
-      return ptz.sendMessage(m.key.remoteJid, { 
-          text: "❌ Perintah ini hanya untuk owner!" 
-      }, { quoted: m });
-  }
-  return true;
+    if (!isUserOwner(m)) {
+        ptz.sendMessage(m.key.remoteJid, { text: "❌ Anda bukan owner!" }, { quoted: m });
+        return false;
+    }
+    return true;
 }
+
 
 module.exports = async (ptz, m) => {
   try {
@@ -48,21 +60,16 @@ module.exports = async (ptz, m) => {
     const isCreator = global.owner.includes(senderNumber);
     const pushname = m.pushName || `${senderNumber}`;
     const isBot = botNumber.includes(senderNumber);
-    console.log("Command yang diterima:", command);
+    if (["menu", "help"].includes(command)) {
+      let menuText = "📌 *DAFTAR MENU BOT:*\n jangan lupa menggunakan . sebelum menggunakan command \n";
+      menuData.menu.forEach(item => {
+        menuText += `\n🔹 *${item.command}*\n    └ ${item.description}`;
+      });
+      await ptz.sendMessage(m.key.remoteJid, { text: menuText }, { quoted: m });
+    }
 
     switch (command) {
-      case "menu":
-        case "help": {
-          
-    
-            let menuText = "📌 *DAFTAR MENU BOT:*\n";
-            menuData.menu.forEach(item => {
-                menuText += `\n🔹 *${item.command}*\n    └ ${item.description}`;
-            });
-            ptz.sendMessage(m.key.remoteJid, { text: menuText }, { quoted: m });
-        }
-        break;
-
+     
       case "listserver": {
         if (!checkOwner(m, ptz)) return;
     

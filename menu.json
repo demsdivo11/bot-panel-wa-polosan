@@ -5,8 +5,16 @@
         "description": "Melihat daftar server"
       },
       {
-        "command": "adduser",
+        "command": "adduser <username>",
         "description": "Menambahkan pengguna baru"
+      },
+      {
+"command": "updateuser <username> <password baru>",
+ "description": "Meng Update Password User!"
+      },
+      {
+"command": "listuser",
+ "description": "Untuk Melihat Semua User!"
       }
     ]
   }
