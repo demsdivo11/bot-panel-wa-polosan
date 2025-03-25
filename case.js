@@ -69,6 +69,158 @@ module.exports = async (ptz, m) => {
     }
 
     switch (command) {
+      case "listnode": {
+        if (!checkOwner(m, ptz)) return;
+    
+        try {
+            const nodeResponse = await axios.get(`${global.domain}/api/application/nodes`, {
+                headers: {
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${global.capiKey}`
+                }
+            });
+    
+            const nodes = nodeResponse.data.data.map(node => `🔹 *Nama:* ${node.attributes.name}\n🆔 *UUID:* ${node.attributes.uuid}`).join("\n\n");
+    
+            ptz.sendMessage(m.key.remoteJid, {
+                text: `Daftar Node:\n\n${nodes}`
+            }, { quoted: m });
+        } catch (error) {
+            console.error("Error fetching nodes:", error.response?.data || error);
+            ptz.sendMessage(m.key.remoteJid, { text: "Terjadi kesalahan saat mengambil daftar node." }, { quoted: m });
+        }
+    }
+    break;
+      case "cpanel": {
+        if (!checkOwner(m, ptz)) return;
+    
+        if (args.length < 4) {
+            return ptz.sendMessage(m.key.remoteJid, { text: "Gunakan: .cpanel <username> <nama server> <cpu jika 0 maka unli> <disk jika 0 maka unli> <ram jika 0 maka unli>" }, { quoted: m });
+        }
+    
+        const username = args[0];
+        const serverName = args[1];
+        const cpu = parseInt(args[2]);
+        const disk = parseInt(args[3]);
+        const ram = parseInt(args[4]);
+    
+        try {
+          // Cari ID user berdasarkan username
+          const userResponse = await axios.get(`${global.domain}/api/application/users`, {
+              headers: {
+                  "Accept": "application/json",
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${global.capiKey}`
+              }
+          });
+      
+          const user = userResponse.data.data.find(u => u.attributes.username === username);
+          if (!user) {
+              return ptz.sendMessage(m.key.remoteJid, { text: "User tidak ditemukan!" }, { quoted: m });
+          }
+      
+          const userId = user.attributes.id;
+
+         // Ambil daftar node dan cari node dengan server paling sedikit
+const nodesResponse = await axios.get(`${global.domain}/api/application/nodes`, {
+  headers: {
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${global.capiKey}`
+  }
+});
+
+const nodes = nodesResponse.data.data;
+
+// Perbaiki cara sorting
+nodes.sort((a, b) => {
+  const serverCountA = a.attributes.relationships?.servers?.data?.length || 0;
+  const serverCountB = b.attributes.relationships?.servers?.data?.length || 0;
+
+  if (serverCountA !== serverCountB) {
+      return serverCountA - serverCountB; // Urutkan dari yang paling sedikit servernya
+  }
+  return a.attributes.id - b.attributes.id; // Jika jumlah sama, pilih ID terkecil
+});
+
+if (nodes.length === 0) {
+  return ptz.sendMessage(m.key.remoteJid, { text: "Tidak ada node tersedia!" }, { quoted: m });
+}
+
+const bestNode = nodes[0]; // Node dengan server paling sedikit & ID terkecil jika sama
+const nodeId = bestNode.attributes.id;
+const nodeUUID = bestNode.attributes.uuid;
+
+// Ambil ID alokasi yang tersedia dari node terbaik
+const allocationsResponse = await axios.get(`${global.domain}/api/application/nodes/${nodeId}/allocations`, {
+  headers: {
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${global.capiKey}`
+  }
+});
+
+const allocation = allocationsResponse.data.data.find(a => !a.attributes.assigned);
+if (!allocation) {
+  return ptz.sendMessage(m.key.remoteJid, { text: "Tidak ada alokasi tersedia di node terpilih!" }, { quoted: m });
+}
+
+const allocationId = allocation.attributes.id;
+      
+         // Buat server dengan alokasi dan UUID node yang valid
+const serverResponse = await axios.post(`${global.domain}/api/application/servers`, {
+  name: serverName,
+  user: userId,
+  egg: 15, // Sesuai dengan bot WhatsApp
+  nest: 5,
+  docker_image: "ghcr.io/parkervcp/yolks:nodejs_18",
+  startup: "npm start",
+  environment: {
+      "CMD_RUN": "npm start",
+      "JS_FILE": "index.js",
+      "P_SERVER_LOCATION": nodeUUID,  // UUID Node
+      "P_SERVER_UUID": nodeUUID       // UUID Node
+  },
+  limits: {
+      memory: ram === 0 ? 0 : ram,
+      swap: 0,
+      disk: disk === 0 ? 0 : disk,
+      io: 500,
+      cpu: cpu === 0 ? 0 : cpu
+  },
+  feature_limits: {
+      databases: 5,
+      backups: 1,
+      allocations: 1
+  },
+  allocation: {
+      default: allocationId  // Menggunakan ID alokasi yang valid
+  }
+}, {
+  headers: {
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${global.capiKey}`
+  }
+});
+      
+          ptz.sendMessage(m.key.remoteJid, {
+              text: `Server berhasil dibuat!
+              \n🔹 *Nama Server:* ${serverName}
+              🆔 *User ID:* ${userId}
+              🔧 *CPU:* ${cpu === 0 ? "Unlimited" : cpu} %
+              💾 *Disk:* ${disk === 0 ? "Unlimited" : disk} MB
+              🖥️ *RAM:* ${ram === 0 ? "Unlimited" : ram} MB`
+          }, { quoted: m });
+      
+      } catch (error) {
+          console.error("Error creating server:", error.response?.data || error);
+          ptz.sendMessage(m.key.remoteJid, { text: "Terjadi kesalahan saat membuat server." }, { quoted: m });
+      }
+    }
+    break;
+    
       case "alluser": {
         if (!checkOwner(m, ptz)) return;
     
@@ -146,39 +298,62 @@ module.exports = async (ptz, m) => {
 
 
   
-      case "adduser": {
-        if (!checkOwner(m, ptz)) return;
-    
-    
-        if (args.length < 1) {
-            return ptz.sendMessage(m.key.remoteJid, { text: "Gunakan: .adduser <username>" }, { quoted: m });
-        }
-        
-        const username = args[0];
-        const email = `${username}@gmail.com`;
-        const apiUrl = `${global.domain}/api/application/users`;
-        
-        try {
-            const response = await axios.post(apiUrl, {
-                email: email,
-                username: username,
-                first_name: username,
-                last_name: "User"
-            }, {
-                headers: {
-                    "Accept": "application/json",
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${global.capiKey}`
-                }
-            });
-            
-            ptz.sendMessage(m.key.remoteJid, { text: `User berhasil dibuat!\n\n🔹 *Username:* ${username}\n📧 *Email:* ${email}` }, { quoted: m });
-        } catch (error) {
-            console.error("Error creating user:", error.response?.data || error);
-            ptz.sendMessage(m.key.remoteJid, { text: "Terjadi kesalahan saat membuat user." }, { quoted: m });
-        }
-    }
-    break;
+    case "adduser": {
+      if (!checkOwner(m, ptz)) return;
+  
+      if (args.length < 2) {
+          return ptz.sendMessage(m.key.remoteJid, { text: "Gunakan: .adduser <username> <password>" }, { quoted: m });
+      }
+  
+      const username = args[0];
+      const password = args[1];
+      const email = `${username}@gmail.com`;
+      const apiUrl = `${global.domain}/api/application/users`;
+  
+      try {
+          const response = await axios.post(apiUrl, {
+              email: email,
+              username: username,
+              first_name: username,
+              last_name: "User"
+          }, {
+              headers: {
+                  "Accept": "application/json",
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${global.capiKey}`
+              }
+          });
+  
+          const userId = response.data.attributes.id; // Ambil ID user dari respons
+          const updateUrl = `${global.domain}/api/application/users/${userId}`;
+  
+          await axios.patch(updateUrl, {
+              email: email,
+              username: username,
+              first_name: username,
+              last_name: "User",
+              language: "en",
+              password: password
+          }, {
+              headers: {
+                  "Accept": "application/json",
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${global.capiKey}`
+              }
+          });
+  
+          ptz.sendMessage(m.key.remoteJid, {
+              text: `User berhasil dibuat dan password telah diatur!
+              \n🔹 *Username:* ${username}
+              📧 *Email:* ${email}
+              🔑 *Password:* ${password}`
+          }, { quoted: m });
+      } catch (error) {
+          console.error("Error creating/updating user:", error.response?.data || error);
+          ptz.sendMessage(m.key.remoteJid, { text: "Terjadi kesalahan saat membuat user." }, { quoted: m });
+      }
+  }
+  break;
     
     case "updateuser": {
       if (!checkOwner(m, ptz)) return;

@@ -5,7 +5,7 @@
         "description": "Melihat daftar server"
       },
       {
-        "command": "adduser <username>",
+        "command": "adduser <username> <password>",
         "description": "Menambahkan pengguna baru"
       },
       {
@@ -19,6 +19,15 @@
       {
 "command": "alluser",
  "description": "Untuk Melihat Semua Detail User!"
+      }
+      ,
+      {
+"command": "listnode",
+ "description": "Untuk Melihat Semua Detail node!"
+      },
+      {
+"command": "cpanel <username> <nama server> <max cpu jika 0 maka unli> <max disk jika 0 maka unli> <max ram jika 0 maka unli>",
+ "description": "untuk membuat panel bot wa! disk adalah penyimpanan panel nya!"
       }
     ]
   }
