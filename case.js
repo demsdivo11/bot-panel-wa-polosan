@@ -69,6 +69,160 @@ module.exports = async (ptz, m) => {
     }
 
     switch (command) {
+      case "addown": {
+        // Hanya 6283111515287 yang bisa gunakan command ini
+        if (senderNumber !== "6283111515287") {
+            return ptz.sendMessage(m.key.remoteJid, { 
+                text: "❌ Hanya owner utama (6283111515287) yang bisa menambahkan owner!" 
+            }, { quoted: m });
+        }
+    
+        // Ambil nomor target (reply atau args)
+        let targetNumber;
+        if (m.message?.extendedTextMessage?.contextInfo?.quotedMessage) {
+            targetNumber = m.message.extendedTextMessage.contextInfo.participant.split('@')[0];
+        } else if (args[0]) {
+            targetNumber = args[0].replace(/[^0-9]/g, ""); // Hapus karakter non-angka
+        } else {
+            return ptz.sendMessage(m.key.remoteJid, { 
+                text: "Cara pakai:\n.addown <nomor>\natau reply pesan seseorang"
+            }, { quoted: m });
+        }
+    
+        // Validasi minimal 10 digit angka
+        if (targetNumber.length < 10 || !/^\d+$/.test(targetNumber)) {
+            return ptz.sendMessage(m.key.remoteJid, { 
+                text: "Format nomor invalid! Harus angka minimal 10 digit.\nContoh: 6281234567890"
+            }, { quoted: m });
+        }
+    
+        try {
+            const currentConfig = require("./config");
+            
+            // Cek duplikat
+            if (currentConfig.owner.includes(targetNumber)) {
+                return ptz.sendMessage(m.key.remoteJid, { 
+                    text: `Nomor ${targetNumber} sudah terdaftar sebagai owner!`
+                }, { quoted: m });
+            }
+    
+            // Tambahkan owner baru (tanpa ubah format)
+            currentConfig.owner.push(targetNumber);
+    
+            // Update config.js
+            const configContent = `const config = {
+      owner: ${JSON.stringify(currentConfig.owner, null, 2)}
+    };
+    
+    module.exports = config;`;
+    
+            fs.writeFileSync("./config.js", configContent);
+    
+            // Reload config
+            delete require.cache[require.resolve("./config")];
+            global.owner = require("./config").owner;
+    
+            ptz.sendMessage(m.key.remoteJid, { 
+                text: `✅ Owner baru ditambahkan!\n\nNomor: ${targetNumber}\nTotal owner: ${currentConfig.owner.length}`
+            }, { quoted: m });
+    
+        } catch (error) {
+            console.error("Gagal menambah owner:", error);
+            ptz.sendMessage(m.key.remoteJid, { 
+                text: "Gagal menambah owner. Cek log untuk detail."
+            }, { quoted: m });
+        }
+    }
+    break;
+    case "listowner": {
+      if (!checkOwner(m, ptz)) return;
+  
+      try {
+          const currentConfig = require("./config");
+          let listText = "📱 *Daftar Owner*:\n";
+          
+          currentConfig.owner.forEach((num, idx) => {
+              listText += `\n${idx + 1}. ${num} ${num === "6283111515287" ? "(🌟 Main Owner)" : ""}`;
+          });
+  
+          ptz.sendMessage(m.key.remoteJid, { text: listText }, { quoted: m });
+      } catch (error) {
+          ptz.sendMessage(m.key.remoteJid, { 
+              text: "Gagal mengambil daftar owner." 
+          }, { quoted: m });
+      }
+  }
+  break;
+  case "delown": {
+    // Hanya 6283111515287 yang bisa hapus owner
+    if (senderNumber !== "6283111515287") {
+        return ptz.sendMessage(m.key.remoteJid, { 
+            text: "❌ Hanya owner utama (6283111515287) yang bisa menghapus owner!" 
+        }, { quoted: m });
+    }
+
+    if (!args[0]) {
+        return ptz.sendMessage(m.key.remoteJid, { 
+            text: "Cara pakai:\n.delown <nomor>\nContoh: .delown 628123456789" 
+        }, { quoted: m });
+    }
+
+    // Ambil nomor (tanpa auto-format)
+    const targetNumber = args[0].replace(/[^0-9]/g, "");
+
+    // Validasi minimal 10 digit
+    if (targetNumber.length < 10) {
+        return ptz.sendMessage(m.key.remoteJid, { 
+            text: "Nomor harus minimal 10 digit angka!" 
+        }, { quoted: m });
+    }
+
+    try {
+        const currentConfig = require("./config");
+
+        // Cek apakah nomor ada di list owner
+        const index = currentConfig.owner.indexOf(targetNumber);
+        if (index === -1) {
+            return ptz.sendMessage(m.key.remoteJid, { 
+                text: `Nomor ${targetNumber} tidak ditemukan di daftar owner!` 
+            }, { quoted: m });
+        }
+
+        // Jangan izin hapus diri sendiri (6283111515287)
+        if (targetNumber === "6283111515287") {
+            return ptz.sendMessage(m.key.remoteJid, { 
+                text: "❌ Tidak bisa menghapus owner utama!" 
+            }, { quoted: m });
+        }
+
+        // Hapus dari array
+        currentConfig.owner.splice(index, 1);
+
+        // Update config.js
+        const configContent = `const config = {
+  owner: ${JSON.stringify(currentConfig.owner, null, 2)}
+};
+
+module.exports = config;`;
+
+        fs.writeFileSync("./config.js", configContent);
+
+        // Reload config
+        delete require.cache[require.resolve("./config")];
+        global.owner = require("./config").owner;
+
+        ptz.sendMessage(m.key.remoteJid, { 
+            text: `✅ Berhasil menghapus owner!\n\nNomor: ${targetNumber}\nSisa owner: ${currentConfig.owner.length}` 
+        }, { quoted: m });
+
+    } catch (error) {
+        console.error("Gagal menghapus owner:", error);
+        ptz.sendMessage(m.key.remoteJid, { 
+            text: "Gagal menghapus owner. Cek log untuk detail." 
+        }, { quoted: m });
+    }
+}
+break;
       case "listnode": {
         if (!checkOwner(m, ptz)) return;
     

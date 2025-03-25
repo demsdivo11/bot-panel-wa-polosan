@@ -29,6 +29,19 @@
 "command": "cpanel <username> <nama server> <max cpu jika 0 maka unli> <max disk jika 0 maka unli> <max ram jika 0 maka unli>",
  "description": "untuk membuat panel bot wa! disk adalah penyimpanan panel nya!"
       }
+      ,
+      {
+"command": "addown <nomer atau reply>",
+ "description": "untuk menambahkan owner! khusus owner utama"
+      } ,
+      {
+"command": "delown <nomer atau reply>",
+ "description": "untuk menghapus owner! khusus owner utama"
+      },
+      {
+"command": "listown",
+ "description": "untuk melihat owner yang ada di database"
+      }
     ]
   }
   
